@@ -1,5 +1,4 @@
 from os import path
-from uuid import uuid4
 
 import faiss
 from langchain_community.docstore.in_memory import InMemoryDocstore
@@ -30,46 +29,43 @@ class DB_FAISS:
             index_to_docstore_id={},
         )
 
-    def load(self, file_name: str | None = None) -> "DB_FAISS":
+    def load(self) -> "DB_FAISS":
         """
         Загружает БД с векторными представлениями фрагментов
         """
-        if file_name is None:
-            if path.isdir(self.name_source):
-                logger.info("Загружаем БД векторов")
-                self.faiss = FAISS.load_local(
-                    self.name_source,
-                    self.embeddings,
-                    allow_dangerous_deserialization=True,
-                )
-            else:
-                raise FileNotFoundError("Не указан источник для загрузки данных")
+        if path.isdir(self.name_source):
+            logger.info("Загружаем БД векторов")
+            self.faiss = FAISS.load_local(
+                self.name_source,
+                self.embeddings,
+                allow_dangerous_deserialization=True,
+            )
         else:
-            self.add_file(file_name)
+            raise FileNotFoundError("Не указан источник для загрузки данных")
         return self
 
     def retriever(self) -> VectorStoreRetriever:
         return self.faiss.as_retriever()
 
-    def add_file(self, file_name: str) -> None:
+    async def add_file(self, file_name: str) -> None:
         """
         Добавляем в базу векторное представление из файла
         """
         logger.info("Загрузка файла %s", file_name)
         if path.isfile(file_name):
             documents = TextLoader(file_name).load()
-            self.add_documents(documents)
+            await self.add_documents(documents)
         else:
             raise FileNotFoundError(f"Файл {file_name} не найден")
 
-    def add_text(self, text: str, metadata: str) -> None:
+    async def add_text(self, text: str, metadata: str) -> None:
         """
         Добавляем в базу векторное представление из текста
         """
         document = Document(page_content=text, metadata={"source": metadata})
-        self.add_documents([document])
+        await self.add_documents([document])
 
-    def add_documents(self, documents: list[Document]) -> None:
+    async def add_documents(self, documents: list[Document]) -> None:
         """
         Добавляем в базу векторное представление
         """
@@ -79,7 +75,7 @@ class DB_FAISS:
         )
         documents_s = text_splitter.split_documents(documents)
         logger.info("Записываем векторные представления фрагментов текста в БД")
-        new_faiss = FAISS.from_documents(documents_s, self.embeddings)
+        new_faiss = await FAISS.afrom_documents(documents_s, self.embeddings)
         if len(self.faiss.index_to_docstore_id) > 0:
             self.faiss.merge_from(new_faiss)
         else:

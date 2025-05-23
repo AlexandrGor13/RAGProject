@@ -1,0 +1,16 @@
+[project]
+name = "ragproject"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "chromadb>=1.0.7",
+    "faiss-cpu>=1.11.0",
+    "langchain>=0.3.24",
+    "langchain-community>=0.3.23",
+    "langchain-ollama>=0.3.2",
+    "lightrag>=0.0.0a2",
+    "rank-bm25>=0.2.2",
+    "transformers>=4.51.3",
+]
