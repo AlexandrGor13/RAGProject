@@ -49,7 +49,10 @@ class DB_FAISS:
         return self
 
     def retriever(self) -> VectorStoreRetriever:
-        return self.faiss.as_retriever()
+        if self.length > 0:
+            return self.faiss.as_retriever()
+        else:
+            raise IndexError("В базе данных нет векторов текста")
 
     async def add_file(self, file_name: str) -> None:
         """
@@ -75,7 +78,7 @@ class DB_FAISS:
         """
         logger.info("Подготовка векторов текста для записи")
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1200, chunk_overlap=200
+            chunk_size=1000, chunk_overlap=200
         )
         documents_s = text_splitter.split_documents(documents)
         logger.info("Записываем векторные представления фрагментов текста в БД")
@@ -88,18 +91,31 @@ class DB_FAISS:
             else:
                 metadata_dict[source] = [document.id]
         self.metadata_dict.update(metadata_dict)
-        if len(self.faiss.index_to_docstore_id) > 0:
+        if self.length > 0:
             self.faiss.merge_from(new_faiss)
         else:
             self.faiss = new_faiss
         self.save()
 
     def save(self) -> None:
+        """
+        Сохраняет БД с векторными представлениями фрагментов
+        """
         self.faiss.save_local(self.name_source)
         with open(self.name_source + r"/source", "w") as f:
             json.dump(self.metadata_dict, f, ensure_ascii=False, indent=4)
 
     async def delete(self, source: str) -> None:
+        """
+        Удаляет из базы векторное представление фрагмента, где в metadata источник текста source
+        """
         if await self.faiss.adelete(self.metadata_dict.get(source)):
             del self.metadata_dict[source]
             self.save()
+
+    @property
+    def length(self):
+        length = 0
+        for v in self.metadata_dict.values():
+            length += len(v)
+        return length

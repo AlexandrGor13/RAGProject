@@ -11,7 +11,7 @@ from .logger import logger
 class Query2LLM:
     def __init__(self, model="owl/t-lite"):
         self.model = OllamaLLM(
-            model=model, temperature=0.15, base_url="http://localhost:11434"
+            model=model, temperature=0.2, base_url="http://localhost:11434"
         )
         self.tamplate = """
         Используйте приведенные ниже фрагменты из извлеченного контекста, чтобы ответить на вопрос.
@@ -25,7 +25,7 @@ class Query2LLM:
         result_content = []
         logger.info("Форматирование текста")
         for document in documents[:3]:
-            result_content.append(document.page_content[:400])
+            result_content.append(document.page_content)
             sources.add(document.metadata.get("source"))
         self.sources = sources
         return "\n".join(result_content)
@@ -53,6 +53,6 @@ class Query2LLM:
             | StrOutputParser()
         )
         result = await chain.ainvoke(query)
-        if self.sources and "не знаю" not in result:
+        if self.sources and "не знаю" not in result.lower():
             result += f"\n Источники: {", ".join(self.sources).strip(",")}"
         return result
