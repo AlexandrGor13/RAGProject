@@ -1,7 +1,6 @@
 import asyncio
 
-from rag.faiss_db import DB_FAISS
-from rag.search import Query2LLM
+from rag import *
 
 
 async def main():
