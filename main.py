@@ -7,9 +7,10 @@ from rag.search import QueryPrompt
 async def main():
     # Загружает БД с векторными представлениями фрагментов
     db = DB_FAISS().load()
+    # await db.delete("worked.txt")
     # print(db.faiss.index_to_docstore_id)
     # db = DB_FAISS()
-    # db.add_file("worked.txt")
+    await db.add_file("worked.txt")
 
     query_prompt = QueryPrompt()
     # while True:

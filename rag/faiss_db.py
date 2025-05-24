@@ -1,4 +1,5 @@
 from os import path
+import json
 
 import faiss
 from langchain_community.docstore.in_memory import InMemoryDocstore
@@ -22,6 +23,7 @@ class DB_FAISS:
     ):
         self.name_source = name_source
         self.embeddings = embeddings
+        self.metadata_dict = {}
         self.faiss = FAISS(
             embedding_function=embeddings,
             index=faiss.IndexFlatL2(0),
@@ -40,6 +42,8 @@ class DB_FAISS:
                 self.embeddings,
                 allow_dangerous_deserialization=True,
             )
+            with open(self.name_source + r"/source", "r") as f:
+                self.metadata_dict = json.load(f)
         else:
             raise FileNotFoundError("Не указан источник для загрузки данных")
         return self
@@ -76,11 +80,26 @@ class DB_FAISS:
         documents_s = text_splitter.split_documents(documents)
         logger.info("Записываем векторные представления фрагментов текста в БД")
         new_faiss = await FAISS.afrom_documents(documents_s, self.embeddings)
+        metadata_dict = {}
+        for document in new_faiss.docstore.__dict__.get("_dict").values():
+            source = document.metadata.get("source")
+            if metadata_dict.get(source) is not None:
+                metadata_dict[source].append(document.id)
+            else:
+                metadata_dict[source] = [document.id]
+        self.metadata_dict.update(metadata_dict)
         if len(self.faiss.index_to_docstore_id) > 0:
             self.faiss.merge_from(new_faiss)
         else:
             self.faiss = new_faiss
-        self.faiss.save_local(self.name_source)
+        self.save()
 
-    def delete_text(self):
-        pass
+    def save(self) -> None:
+        self.faiss.save_local(self.name_source)
+        with open(self.name_source + r"/source", "w") as f:
+            json.dump(self.metadata_dict, f, ensure_ascii=False, indent=4)
+
+    async def delete(self, source: str) -> None:
+        if await self.faiss.adelete(self.metadata_dict.get(source)):
+            del self.metadata_dict[source]
+            self.save()
