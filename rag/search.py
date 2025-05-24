@@ -5,7 +5,7 @@ from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_ollama import OllamaLLM
 
-from rag.logger import logger
+from .logger import logger
 
 
 class Query2LLM:
