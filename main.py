@@ -1,7 +1,7 @@
 import asyncio
 
 from rag.faiss_db import DB_FAISS
-from rag.search import QueryPrompt
+from rag.search import Query2LLM
 
 
 async def main():
@@ -12,9 +12,9 @@ async def main():
     # db = DB_FAISS()
     await db.add_file("worked.txt")
 
-    query_prompt = QueryPrompt()
+    query = Query2LLM()
     # while True:
-    result = await query_prompt.invoke(input("Ваш вопрос: "), db.retriever())
+    result = await query.invoke(input("Ваш вопрос: "), db.retriever())
     print(result)
 
 

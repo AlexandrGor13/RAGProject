@@ -8,7 +8,7 @@ from langchain_ollama import OllamaLLM
 from rag.logger import logger
 
 
-class QueryPrompt:
+class Query2LLM:
     def __init__(self, model="owl/t-lite"):
         self.model = OllamaLLM(
             model=model, temperature=0.15, base_url="http://localhost:11434"
