@@ -9,6 +9,7 @@ from langchain_core.documents import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_ollama import OllamaEmbeddings
+from sympy.solvers.diophantine.diophantine import length
 
 from .logger import logger
 
@@ -90,11 +91,12 @@ class DB_FAISS:
                 metadata_dict[source].append(document.id)
             else:
                 metadata_dict[source] = [document.id]
-        self.metadata_dict.update(metadata_dict)
         if self.length > 0:
             self.faiss.merge_from(new_faiss)
+            self.metadata_dict.update(metadata_dict)
         else:
             self.faiss = new_faiss
+            self.metadata_dict = metadata_dict
         self.save()
 
     def save(self) -> None:

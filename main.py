@@ -5,12 +5,12 @@ from rag import DB_FAISS, Query2LLM
 
 async def main():
     # Загружает БД с векторными представлениями фрагментов
-    db = DB_FAISS().load()
+    # db = DB_FAISS().load()
     # await db.delete("worked_.txt")
 
-    # db = DB_FAISS()
-    # await db.add_file("worked.txt")
-    # await db.add_file("worked_.txt")
+    db = DB_FAISS()
+    await db.add_file("worked.txt")
+    await db.add_file("worked_.txt")
 
     query = Query2LLM()
     while True:
