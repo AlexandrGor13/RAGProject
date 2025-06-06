@@ -1,20 +1,24 @@
 import asyncio
-
+from langchain_ollama import OllamaEmbeddings, OllamaLLM
 from rag import DB_FAISS, Query2LLM
 
 
 async def main():
+    model = "owl/t-lite"
+    url = "http://localhost:11434"
     # Загружает БД с векторными представлениями фрагментов
-    # db = DB_FAISS().load()
-    # await db.delete("worked_.txt")
+    db_tlite = DB_FAISS(
+        OllamaEmbeddings(model=model, base_url=url), name_source="faiss_index_tlite1"
+    )
+    try:
+        db_tlite = db_tlite.load()
+    except:
+        await db_tlite.from_json_file("products1.json")
 
-    db = DB_FAISS()
-    await db.add_file("worked.txt")
-    await db.add_file("worked_.txt")
-
-    query = Query2LLM()
+    query_tlite = Query2LLM(model=OllamaLLM(model=model, temperature=0.1, base_url=url))
     while True:
-        result = await query.invoke(input("Ваш вопрос: "), db.retriever())
+        retriever = db_tlite.retriever()
+        result = await query_tlite.invoke(input("Ваш вопрос: "), retriever)
         print(result)
 
 

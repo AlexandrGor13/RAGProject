@@ -9,7 +9,6 @@ from langchain_core.documents import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_ollama import OllamaEmbeddings
-from sympy.solvers.diophantine.diophantine import length
 
 from .logger import logger
 
@@ -17,9 +16,7 @@ from .logger import logger
 class DB_FAISS:
     def __init__(
         self,
-        embeddings: OllamaEmbeddings = OllamaEmbeddings(
-            model="owl/t-lite", base_url="http://localhost:11434"
-        ),
+        embeddings: OllamaEmbeddings,
         name_source="faiss_index",
     ):
         self.name_source = name_source
@@ -31,6 +28,8 @@ class DB_FAISS:
             docstore=InMemoryDocstore(),
             index_to_docstore_id={},
         )
+        self.chunk_size = 1000
+        self.chunk_overlap = 150
 
     def load(self) -> "DB_FAISS":
         """
@@ -55,7 +54,7 @@ class DB_FAISS:
         else:
             raise IndexError("В базе данных нет векторов текста")
 
-    async def add_file(self, file_name: str) -> None:
+    async def from_txt_file(self, file_name: str) -> None:
         """
         Добавляем в базу векторное представление из файла
         """
@@ -66,20 +65,49 @@ class DB_FAISS:
         else:
             raise FileNotFoundError(f"Файл {file_name} не найден")
 
-    async def add_text(self, text: str, metadata: str) -> None:
+    async def from_json_file(self, file_name: str) -> None:
+        """
+        Добавляем в базу векторное представление из json-файла
+        """
+        logger.info("Загрузка файла %s", file_name)
+        if path.isfile(file_name):
+            with open(file_name, "r") as f:
+                data = json.load(f)
+            documents = [
+                Document(
+                    page_content=f"{d.get('name')}\n{d.get('specifications')}\nцена {d.get('price')} {d.get("category")}",
+                    metadata={
+                        "source": d.get("category"),
+                        "name": d.get("name"),
+                        "specifications": d.get("specifications"),
+                        "price": "цена " + d.get("price"),
+                        "description": d.get("description"),
+                        "url": d.get("url"),
+                    },
+                )
+                for d in data
+            ]
+            await self.add_documents(documents)
+        else:
+            raise FileNotFoundError(f"Файл {file_name} не найден")
+
+    async def add_text(self, text: str, metadata: dict) -> None:
         """
         Добавляем в базу векторное представление из текста
         """
-        document = Document(page_content=text, metadata={"source": metadata})
-        await self.add_documents([document])
+        if metadata.get("source"):
+            document = Document(page_content=text, metadata=metadata)
+            await self.add_documents([document])
+        else:
+            raise Exception("The metadata must contain the 'source' key")
 
-    async def add_documents(self, documents: list[Document]) -> None:
+    async def add_documents(self, documents: list[Document], autosave=True) -> None:
         """
         Добавляем в базу векторное представление
         """
         logger.info("Подготовка векторов текста для записи")
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000, chunk_overlap=200
+            chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap
         )
         documents_s = text_splitter.split_documents(documents)
         logger.info("Записываем векторные представления фрагментов текста в БД")
@@ -97,7 +125,8 @@ class DB_FAISS:
         else:
             self.faiss = new_faiss
             self.metadata_dict = metadata_dict
-        self.save()
+        if autosave:
+            self.save()
 
     def save(self) -> None:
         """
