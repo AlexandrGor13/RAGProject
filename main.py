@@ -4,7 +4,7 @@ from rag import DB_FAISS, Query2LLM
 
 
 async def main():
-    model = "owl/t-lite"
+    model = "t-lite-quantized"
     url = "http://localhost:11434"
     # Загружает БД с векторными представлениями фрагментов
     db_tlite = DB_FAISS(
@@ -15,7 +15,7 @@ async def main():
     except:
         await db_tlite.from_json_file("products1.json")
 
-    query_tlite = Query2LLM(model=OllamaLLM(model=model, temperature=0.1, base_url=url))
+    query_tlite = Query2LLM(model=OllamaLLM(model=model, temperature=0.2, base_url=url))
     while True:
         retriever = db_tlite.retriever()
         result = await query_tlite.invoke(input("Ваш вопрос: "), retriever)

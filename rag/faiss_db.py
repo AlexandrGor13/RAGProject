@@ -50,7 +50,10 @@ class DB_FAISS:
 
     def retriever(self) -> VectorStoreRetriever:
         if self.length > 0:
-            return self.faiss.as_retriever()
+            return self.faiss.as_retriever(
+                search_type="similarity_score_threshold",
+                search_kwargs={"score_threshold": 0.4, "k": 10},
+            )
         else:
             raise IndexError("В базе данных нет векторов текста")
 
