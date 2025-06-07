@@ -10,7 +10,11 @@ dependencies = [
     "langchain>=0.3.24",
     "langchain-community>=0.3.23",
     "langchain-ollama>=0.3.2",
-    "lightrag>=0.0.0a2",
-    "rank-bm25>=0.2.2",
-    "transformers>=4.51.3",
+    "pymorphy3>=2.0.4",
+]
+
+[dependency-groups]
+dev = [
+    "beautifulsoup4>=4.13.4",
+    "requests>=2.32.3",
 ]
