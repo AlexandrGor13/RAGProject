@@ -1,5 +1,3 @@
-import re
-
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableParallel
 from langchain_core.output_parsers import StrOutputParser
@@ -24,7 +22,7 @@ class Query2LLM:
         sources = set()
         result_content = []
         logger.info("Форматирование текста")
-        for document in documents[:11]:
+        for document in documents[:10]:
             result_content.append(document.page_content)
             sources.add(document.metadata.get("source"))
         self.sources = sources

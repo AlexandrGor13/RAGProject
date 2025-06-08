@@ -84,7 +84,6 @@ class DB_FAISS:
                         "name": d.get("name"),
                         "specifications": d.get("specifications"),
                         "price": "цена " + d.get("price"),
-                        "description": d.get("description"),
                         "url": d.get("url"),
                     },
                 )
