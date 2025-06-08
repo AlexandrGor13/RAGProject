@@ -47,25 +47,23 @@ class Query2LLM:
 
     def process_query(self, query):
         """Фильтрация слов по частям речи"""
-        filtered_words_noun = []
+        filtered_words = []
         filtered_words_verb = []
         for word in query.split():
             parsed_word = self.morph_analyzer.parse(word)[0]
             normalized_word = self.morph_analyzer.parse(word)[0].normal_form
-            if parsed_word.tag.POS in {"NOUN"}:
-                filtered_words_noun.append(normalized_word)
+            if parsed_word.tag.POS in {"NOUN", "ADJF"}:
+                filtered_words.append(normalized_word)
             elif parsed_word.tag.POS in {"VERB", "INFN"}:
                 filtered_words_verb.append(normalized_word)
-        self.classify_query(filtered_words_verb, filtered_words_noun)
-        filtered_words_noun = " ".join(filtered_words_noun)
-        return filtered_words_noun
+        self.classify_query(filtered_words_verb, filtered_words)
+        filtered_words = " ".join(filtered_words)
+        return filtered_words
 
     async def invoke(self, query: str, retriever: VectorStoreRetriever):
         """ """
-        filtered_words_noun = self.process_query(query)
-        product_list = (retriever | self.format_product_list).invoke(
-            filtered_words_noun
-        )
+        filtered_words = self.process_query(query)
+        product_list = (retriever | self.format_product_list).invoke(filtered_words)
         chain = (
             RunnableParallel(
                 context=retriever | self.format_context,
@@ -75,11 +73,11 @@ class Query2LLM:
             | self.model
             | StrOutputParser()
         )
-        result = await chain.ainvoke(filtered_words_noun)
+        result = await chain.ainvoke(filtered_words)
         result_rpod_list = "\n\nПользуются спросом следующие товары:\n" + product_list
         return result + result_rpod_list
 
-    def classify_query(self, query_verb: list, query_noun: list):
+    def classify_query(self, query_verb: list, query_noun_adjf: list):
         # if pattern.match(query):
         #     if category == "fact":
         #         # self.tamplate = TemplatePrompt.common_info_prompt

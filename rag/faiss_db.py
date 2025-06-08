@@ -51,8 +51,7 @@ class DB_FAISS:
     def retriever(self) -> VectorStoreRetriever:
         if self.length > 0:
             return self.faiss.as_retriever(
-                search_type="similarity_score_threshold",
-                search_kwargs={"score_threshold": 0.4, "k": 10},
+                search_kwargs={"k": 10},
             )
         else:
             raise IndexError("В базе данных нет векторов текста")
@@ -78,7 +77,10 @@ class DB_FAISS:
                 data = json.load(f)
             documents = [
                 Document(
-                    page_content=f"{d.get('name')}\n{d.get('specifications')}\nцена {d.get('price')} {d.get("category")}",
+                    page_content=f"""{d.get('name')}
+                    {d.get('specifications')}
+                    цена {d.get('price')}
+                    категория {d.get("category")}""",
                     metadata={
                         "source": d.get("category"),
                         "name": d.get("name"),
