@@ -1,5 +1,4 @@
 import json
-from multiprocessing.dummy import current_process
 
 from bs4 import BeautifulSoup
 import requests
@@ -11,12 +10,6 @@ category_li = soup.find_all(
     lambda tag: tag.name == "li"
     and tag.get("class") in [["has"], ["nochildren_bg"], ["has active"]]
 )
-
-# category = [cat_li.find("a").text.lower() for cat_li in category_li]
-with open("category.json", "r") as f:
-    category = json.load(f)
-
-print(category)
 
 category_folders = [
     cat_li.find(lambda tag: tag.name == "a").get("href") for cat_li in category_li
@@ -74,5 +67,5 @@ for idx, product in enumerate(products_path):
     )
 
 
-with open("products_.json", "w") as f:
+with open("products.json", "w") as f:
     json.dump(products, f, ensure_ascii=False, indent=4)

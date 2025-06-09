@@ -6,30 +6,41 @@ from langchain_community.docstore.in_memory import InMemoryDocstore
 from langchain_community.document_loaders import TextLoader
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableParallel
+from langchain_core.output_parsers import StrOutputParser
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_core.vectorstores import VectorStoreRetriever
-from langchain_ollama import OllamaEmbeddings
+from langchain_ollama import OllamaEmbeddings, OllamaLLM
+from pymorphy3 import MorphAnalyzer
 
 from .logger import logger
+from .templates import TemplatePrompt
 
 
 class DB_FAISS:
     def __init__(
         self,
-        embeddings: OllamaEmbeddings,
+        model: str,
+        base_url: str,
         name_source="faiss_index",
+        chunk_size=1000,
+        chunk_overlap=150,
     ):
         self.name_source = name_source
-        self.embeddings = embeddings
+        self.embeddings = OllamaEmbeddings(model=model, base_url=base_url)
+        self.model = OllamaLLM(model=model, temperature=0.2, base_url=base_url)
         self.metadata_dict = {}
         self.faiss = FAISS(
-            embedding_function=embeddings,
+            embedding_function=self.embeddings,
             index=faiss.IndexFlatL2(0),
             docstore=InMemoryDocstore(),
             index_to_docstore_id={},
         )
-        self.chunk_size = 1000
-        self.chunk_overlap = 150
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+        self.sources = set()
+        self.morph_analyzer = MorphAnalyzer()
+        self.tamplate = TemplatePrompt.products_prompt
 
     def load(self) -> "DB_FAISS":
         """
@@ -48,11 +59,34 @@ class DB_FAISS:
             raise FileNotFoundError("Не указан источник для загрузки данных")
         return self
 
-    def retriever(self) -> VectorStoreRetriever:
+    def retriever(self, query: str):
         if self.length > 0:
-            return self.faiss.as_retriever(
-                search_kwargs={"k": 10},
-            )
+            stop_words = {"системы", "материалы", "изделия", "продукция", "для"}
+            words = self.process_query(query)
+            list_query_words = set()
+            if words.get("NOUN"):
+                list_query_words = list_query_words | set(words.get("NOUN"))
+            if words.get("ADJF"):
+                list_query_words = list_query_words | set(words.get("ADJF"))
+            words_source = set()
+            for w in self.metadata_dict.keys():
+                for s in stop_words:
+                    w = w.replace(s, "").strip()
+                words_source.add(self.morph_analyzer.parse(w)[0].normal_form)
+            source = []
+            for w in list_query_words:
+                if self.morph_analyzer.parse(w)[0].normal_form in words_source:
+                    source.append(w)
+            if source:
+                logger.info("Поиск в источниках: %s", source)
+                return self.faiss.as_retriever(
+                    search_kwargs={"k": 10, "filter": {"source": {"$in": source}}},
+                )
+            else:
+                logger.info("Поиск по всем источникам")
+                return self.faiss.as_retriever(
+                    search_kwargs={"k": 10},
+                )
         else:
             raise IndexError("В базе данных нет векторов текста")
 
@@ -77,10 +111,8 @@ class DB_FAISS:
                 data = json.load(f)
             documents = [
                 Document(
-                    page_content=f"""{d.get('name')}
-                    {d.get('specifications')}
-                    цена {d.get('price')}
-                    категория {d.get("category")}""",
+                    page_content=f"""{d.get("category")}
+            {d.get('name')} {d.get('specifications')} цена {d.get('price')}""",
                     metadata={
                         "source": d.get("category"),
                         "name": d.get("name"),
@@ -154,3 +186,83 @@ class DB_FAISS:
         for v in self.metadata_dict.values():
             length += len(v)
         return length
+
+    def __format_context(self, documents: list[Document]):
+        """ """
+        sources = set()
+        result_content = []
+        logger.info("Форматирование контекста")
+        for document in documents[:10]:
+            result_content.append(document.page_content)
+            sources.add(document.metadata.get("source"))
+        self.sources = sources
+        return "\n".join(result_content)
+
+    def __format_product_list(self, documents: list[Document]):
+        """ """
+        url = "https://example.ru"
+        product_list = []
+        logger.info("Форматирование списка товаров")
+        for document in documents[:6]:
+            data = document.metadata
+            data_str = f"\t- {data.get("name")} ({data.get("specifications")}) {data.get("price")} {url + data.get("url")}"
+            product_list.append(data_str)
+        return "\n".join(product_list)
+
+    def process_query(self, query):
+        """Фильтрация слов по частям речи"""
+        filtered_words = {}
+        for word in query.split():
+            parsed_word = self.morph_analyzer.parse(word)[0]
+            normalized_word = self.morph_analyzer.parse(word)[0].normal_form
+            if parsed_word.tag.POS == "NOUN":
+                filtered_words["NOUN"] = (
+                    [normalized_word]
+                    if not filtered_words.get("NOUN")
+                    else filtered_words.get("NOUN") + [normalized_word]
+                )
+            elif parsed_word.tag.POS == "ADJF":
+                filtered_words["ADJF"] = (
+                    [normalized_word]
+                    if not filtered_words.get("ADJF")
+                    else filtered_words.get("ADJF") + [normalized_word]
+                )
+        return filtered_words
+
+    @property
+    def prompt(self):
+        logger.info("Настраиваем шаблон запроса в понятном для модели формате")
+        result = ChatPromptTemplate.from_messages(self.tamplate)
+        return result
+
+    async def invoke(self, query: str):
+        """ """
+        recommendation = self.__classify_query(query)
+        retriever = self.retriever(query)
+        product_list = ""
+        if recommendation:
+            product_list = (retriever | self.__format_product_list).invoke(query)
+        recommendation = (
+            product_list if not recommendation else recommendation + product_list
+        )
+        chain = (
+            RunnableParallel(
+                context=retriever | self.__format_context,
+                question=lambda data: data,
+            )
+            | self.prompt
+            | self.model
+            | StrOutputParser()
+        )
+        return await chain.ainvoke(query) + recommendation
+
+    def __classify_query(self, query: str):
+        recommendation = None
+        if {"адрес", "телефон", "работа", "сайт", "магазин", "режим", "ссылка"} & set(
+            self.process_query(query).get("NOUN")
+        ):
+            self.tamplate = TemplatePrompt.common_info_prompt
+        else:
+            self.tamplate = TemplatePrompt.products_prompt
+            recommendation = "\n\nПользуются спросом следующие товары:\n"
+        return recommendation
