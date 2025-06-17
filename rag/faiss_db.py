@@ -68,24 +68,27 @@ class DB_FAISS:
                 list_query_words = list_query_words | set(words.get("NOUN"))
             if words.get("ADJF"):
                 list_query_words = list_query_words | set(words.get("ADJF"))
-            words_source = set()
+            words_source = {}
             for w in self.metadata_dict.keys():
+                w_new = w
                 for s in stop_words:
-                    w = w.replace(s, "").strip()
-                words_source.add(self.morph_analyzer.parse(w)[0].normal_form)
+                    w_new = w_new.replace(s, "").strip()
+                words_source.update(
+                    {self.morph_analyzer.parse(w_new)[0].normal_form: w}
+                )
             source = []
-            for w in list_query_words:
-                if self.morph_analyzer.parse(w)[0].normal_form in words_source:
-                    source.append(w)
+            for k, v in words_source.items():
+                if k in list_query_words:
+                    source.append(v)
             if source:
                 logger.info("Поиск в источниках: %s", source)
                 return self.faiss.as_retriever(
-                    search_kwargs={"k": 10, "filter": {"source": {"$in": source}}},
+                    search_kwargs={"k": 20, "filter": {"source": {"$in": source}}},
                 )
             else:
                 logger.info("Поиск по всем источникам")
                 return self.faiss.as_retriever(
-                    search_kwargs={"k": 10},
+                    search_kwargs={"k": 30},
                 )
         else:
             raise IndexError("В базе данных нет векторов текста")
@@ -111,8 +114,7 @@ class DB_FAISS:
                 data = json.load(f)
             documents = [
                 Document(
-                    page_content=f"""{d.get("category")}
-            {d.get('name')} {d.get('specifications')} цена {d.get('price')}""",
+                    page_content=f"{d.get("category")} {d.get('name')} {d.get('specifications')} цена {d.get('price')}",
                     metadata={
                         "source": d.get("category"),
                         "name": d.get("name"),
@@ -192,7 +194,7 @@ class DB_FAISS:
         sources = set()
         result_content = []
         logger.info("Форматирование контекста")
-        for document in documents[:10]:
+        for document in documents:
             result_content.append(document.page_content)
             sources.add(document.metadata.get("source"))
         self.sources = sources
@@ -203,7 +205,7 @@ class DB_FAISS:
         url = "https://example.ru"
         product_list = []
         logger.info("Форматирование списка товаров")
-        for document in documents[:6]:
+        for document in documents[:5]:
             data = document.metadata
             data_str = f"\t- {data.get("name")} ({data.get("specifications")}) {data.get("price")} {url + data.get("url")}"
             product_list.append(data_str)
@@ -242,9 +244,6 @@ class DB_FAISS:
         product_list = ""
         if recommendation:
             product_list = (retriever | self.__format_product_list).invoke(query)
-        recommendation = (
-            product_list if not recommendation else recommendation + product_list
-        )
         chain = (
             RunnableParallel(
                 context=retriever | self.__format_context,
@@ -254,15 +253,35 @@ class DB_FAISS:
             | self.model
             | StrOutputParser()
         )
-        return await chain.ainvoke(query) + recommendation
+        result = await chain.ainvoke(query)
+        return (
+            result + "\n\nРекомендуем следующие товары:\n" + product_list
+            if not len(product_list)
+            else result
+        )
 
     def __classify_query(self, query: str):
-        recommendation = None
-        if {"адрес", "телефон", "работа", "сайт", "магазин", "режим", "ссылка"} & set(
-            self.process_query(query).get("NOUN")
-        ):
+        recommendation = False
+        is_noun = (
+            {"адрес", "телефон", "работа", "сайт", "режим", "ссылка"}
+            & set(self.process_query(query).get("NOUN"))
+            if self.process_query(query).get("NOUN")
+            else False
+        )
+        is_verb = (
+            {"работает", "открывается"} & set(self.process_query(query).get("VERB"))
+            if self.process_query(query).get("VERB")
+            else False
+        )
+        is_infn = (
+            {"работать", "находится", "позвонить", "зайти"}
+            & set(self.process_query(query).get("INFN"))
+            if self.process_query(query).get("INFN")
+            else False
+        )
+        if is_noun or is_verb or is_infn:
             self.tamplate = TemplatePrompt.common_info_prompt
         else:
             self.tamplate = TemplatePrompt.products_prompt
-            recommendation = "\n\nПользуются спросом следующие товары:\n"
+            recommendation = True
         return recommendation
