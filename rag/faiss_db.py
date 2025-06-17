@@ -83,12 +83,12 @@ class DB_FAISS:
             if source:
                 logger.info("Поиск в источниках: %s", source)
                 return self.faiss.as_retriever(
-                    search_kwargs={"k": 20, "filter": {"source": {"$in": source}}},
+                    search_kwargs={"k": 30, "filter": {"source": {"$in": source}}},
                 )
             else:
                 logger.info("Поиск по всем источникам")
                 return self.faiss.as_retriever(
-                    search_kwargs={"k": 30},
+                    search_kwargs={"k": 50},
                 )
         else:
             raise IndexError("В базе данных нет векторов текста")
@@ -114,7 +114,8 @@ class DB_FAISS:
                 data = json.load(f)
             documents = [
                 Document(
-                    page_content=f"{d.get("category")} {d.get('name')} {d.get('specifications')} цена {d.get('price')}",
+                    # page_content=f"{d.get("category")} {d.get('name')} {d.get('specifications')} цена {d.get('price')}",
+                    page_content=f"{d.get("category")} {d.get('name')}",
                     metadata={
                         "source": d.get("category"),
                         "name": d.get("name"),
@@ -195,7 +196,9 @@ class DB_FAISS:
         result_content = []
         logger.info("Форматирование контекста")
         for document in documents:
-            result_content.append(document.page_content)
+            data = document.metadata
+            result_content = f"{data.get("category")} {data.get('name')} {data.get('specifications')} цена {data.get('price')}"
+            # result_content.append(document.page_content)
             sources.add(document.metadata.get("source"))
         self.sources = sources
         return "\n".join(result_content)
@@ -256,7 +259,7 @@ class DB_FAISS:
         result = await chain.ainvoke(query)
         return (
             result + "\n\nРекомендуем следующие товары:\n" + product_list
-            if not len(product_list)
+            if len(product_list)
             else result
         )
 
